@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MALE UAV Aero Piston Engine - Digital Twin | SIH26054 DRDO</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        drdo: {
+                            navy: '#0b192c',
+                            card: '#1e293b',
+                            border: '#334155',
+                            accent: '#38bdf8',
+                            warning: '#f59e0b',
+                            danger: '#ef4444',
+                            success: '#10b981'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f1f5f9;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-blue {
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+        }
+        .glow-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.35);
+        }
+        canvas {
+            display: block;
+            outline: none;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="glass-panel sticky top-0 z-50 px-6 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="bg-sky-500/20 p-2 rounded-lg border border-sky-500/40 text-sky-400">
+                <i data-lucide="cpu" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-lg font-bold tracking-wide text-white">DRDO MALE UAV Digital Twin</h1>
+                    <span class="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs px-2 py-0.5 rounded font-mono">PS: SIH26054</span>
+                    <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2 py-0.5 rounded font-mono flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> SYSTEM ONLINE
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400">Aero Piston Engine Health Monitoring, Fault Prediction & RUL Estimation</p>
+            </div>
+        </div>
+
+        <!-- Mission Advisory Status -->
+        <div id="mission-advisory-badge" class="glass-panel px-4 py-2 rounded-xl border border-emerald-500/40 bg-emerald-950/30 flex items-center gap-3">
+            <div class="p-2 rounded-full bg-emerald-500/20 text-emerald-400">
+                <i data-lucide="shield-check" class="w-5 h-5" id="advisory-icon"></i>
+            </div>
+            <div>
+                <div class="text-xs text-slate-400 uppercase font-semibold tracking-wider">Mission Advisory</div>
+                <div id="advisory-text" class="text-sm font-bold text-emerald-400">NOMINAL FLIGHT PROFILE - OK TO CONTINUE</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-4 grid grid-cols-12 gap-4">
+
+        <!-- Left Sidebar: Controls & Preset Scenarios (Cols 3) -->
+        <aside class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+            
+            <!-- Flight Regime & Simulation Controls -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-700/60">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4"></i> Simulation & Flight Controls
+                    </h2>
+                    <span id="telemetry-rate" class="text-xs font-mono text-slate-400">10 Hz Live</span>
+                </div>
+
+                <!-- Flight Profiles -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs text-slate-400">Flight Mode</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setFlightProfile('CRUISE')" id="btn-cruise" class="py-2 px-3 rounded-lg text-xs font-semibold bg-sky-600 text-white hover:bg-sky-500 transition">
+                            🛫 Cruise (75% PWR)
+                        </button>
+                        <button onclick="setFlightProfile('TAKEOFF')" id="btn-takeoff" class="py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+                            🚀 Max Takeoff (100%)
+                        </button>
+                        <button onclick="setFlightProfile('LOITER')" id="btn-loiter" class="py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+                            🛰️ High-Alt Loiter
+                        </button>
+                        <button onclick="setFlightProfile('IDLE')" id="btn-idle" class="py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+                            🛑 Ground Idle
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Fault Injection Scenarios -->
+                <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-700/60">
+                    <label class="text-xs font-semibold text-amber-400 flex items-center gap-1">
+                        <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Inject Engine Fault Scenario
+                    </label>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="injectFault('NORMAL')" class="py-2 px-3 rounded-lg text-xs font-medium bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 text-left flex items-center justify-between">
+                            <span>✅ Normal Operation</span>
+                            <span class="text-[10px] font-mono text-emerald-400">Healthy</span>
+                        </button>
+                        <button onclick="injectFault('CYLINDER_OVERHEAT')" class="py-2 px-3 rounded-lg text-xs font-medium bg-amber-950/60 border border-amber-500/40 text-amber-300 hover:bg-amber-900/60 text-left flex items-center justify-between">
+                            <span>🔥 Cyl #2 CHT Thermal Spike</span>
+                            <span class="text-[10px] font-mono text-amber-400">Thermal</span>
+                        </button>
+                        <button onclick="injectFault('OIL_PRESSURE_DROP')" class="py-2 px-3 rounded-lg text-xs font-medium bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:bg-rose-900/60 text-left flex items-center justify-between">
+                            <span>🛢️ Oil Line Pressure Failure</span>
+                            <span class="text-[10px] font-mono text-rose-400">Critical</span>
+                        </button>
+                        <button onclick="injectFault('VIBRATION_MISFIRE')" class="py-2 px-3 rounded-lg text-xs font-medium bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 text-left flex items-center justify-between">
+                            <span>⚡ Spark Plug Misfire / Vibration</span>
+                            <span class="text-[10px] font-mono text-purple-400">Vib Anomaly</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- RPM Manual Slider -->
+                <div class="flex flex-col gap-1 pt-2 border-t border-slate-700/60">
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>Engine Speed (RPM)</span>
+                        <span id="slider-rpm-val" class="font-mono text-sky-400 font-bold">5200 RPM</span>
+                    </div>
+                    <input type="range" id="slider-rpm" min="1200" max="6200" value="5200" class="w-full accent-sky-400 cursor-pointer" oninput="updateManualRPM(this.value)">
+                </div>
+
+            </div>
+
+            <!-- AI Predictive Health & RUL Summary Panel -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3 flex-1">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2 pb-2 border-b border-slate-700/60">
+                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> AI Health & RUL Analytics
+                </h2>
+
+                <!-- Health Index Meter -->
+                <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs text-slate-400">Overall Health Index</div>
+                        <div id="health-index-score" class="text-2xl font-black text-emerald-400 font-mono">98.4%</div>
+                        <div class="text-[10px] text-slate-400">Multi-variate z-score model</div>
+                    </div>
+                    <div class="w-14 h-14 relative flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90">
+                            <circle cx="28" cy="28" r="22" stroke="#334155" stroke-width="4" fill="transparent"></circle>
+                            <circle id="health-circle" cx="28" cy="28" r="22" stroke="#10b981" stroke-width="4" fill="transparent" stroke-dasharray="138" stroke-dashoffset="5"></circle>
+                        </svg>
+                        <i data-lucide="heart-pulse" class="w-5 h-5 text-emerald-400 absolute"></i>
+                    </div>
+                </div>
+
+                <!-- Anomaly Score & RUL -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] text-slate-400">AI Anomaly Risk</div>
+                        <div id="anomaly-score" class="text-lg font-bold font-mono text-sky-400">1.2%</div>
+                        <div class="text-[9px] text-emerald-400">Isolation Forest</div>
+                    </div>
+                    <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                        <div class="text-[11px] text-slate-400">Est. RUL (Remaining)</div>
+                        <div id="rul-hours" class="text-lg font-bold font-mono text-amber-400">412.5 hrs</div>
+                        <div class="text-[9px] text-slate-400">LSTM Regression</div>
+                    </div>
+                </div>
+
+                <!-- SHAP Feature Importance Breakdown -->
+                <div class="flex flex-col gap-2 pt-2 border-t border-slate-700/60">
+                    <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                        <span>Top Anomaly Contributors (SHAP)</span>
+                        <span class="text-[10px] text-slate-400 font-mono">Live</span>
+                    </div>
+
+                    <div class="space-y-1.5 text-xs font-mono">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+                                <span>Cyl 2 CHT Temp</span>
+                                <span id="shap-cht2-val" class="text-sky-400">12%</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                <div id="shap-cht2-bar" class="bg-sky-400 h-full rounded-full transition-all duration-300" style="width: 12%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+                                <span>Oil Line Pressure</span>
+                                <span id="shap-oil-val" class="text-emerald-400">8%</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                <div id="shap-oil-bar" class="bg-emerald-400 h-full rounded-full transition-all duration-300" style="width: 8%"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+                                <span>Vibration FFT Peak</span>
+                                <span id="shap-vib-val" class="text-purple-400">5%</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                <div id="shap-vib-bar" class="bg-purple-400 h-full rounded-full transition-all duration-300" style="width: 5%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </aside>
+
+        <!-- Center: 3D Engine Digital Twin Viewport (Cols 6) -->
+        <section class="col-span-12 lg:col-span-6 flex flex-col gap-4">
+            
+            <!-- 3D Canvas Card -->
+            <div class="glass-panel rounded-2xl overflow-hidden flex-1 relative flex flex-col min-h-[460px]">
+                
+                <!-- Viewport Overlay Header -->
+                <div class="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+                    <div class="glass-panel px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-auto flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping"></span>
+                        <span class="text-xs font-semibold text-slate-200">3D Interactive Engine Model (4-Cyl Boxer Aero Piston)</span>
+                    </div>
+
+                    <!-- 3D Controls buttons -->
+                    <div class="glass-panel p-1 rounded-lg border border-slate-700/60 pointer-events-auto flex gap-1">
+                        <button onclick="reset3DCamera()" title="Reset View" class="p-1.5 rounded text-slate-300 hover:bg-slate-700 hover:text-white transition">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="toggleExplodedView()" title="Toggle Exploded View" id="btn-exploded" class="p-1.5 rounded text-slate-300 hover:bg-slate-700 hover:text-white transition flex items-center gap-1 text-xs px-2">
+                            <i data-lucide="layers" class="w-4 h-4"></i>
+                            <span>Exploded View</span>
+                        </button>
+                        <button onclick="toggleHeatmap3D()" title="Toggle Thermal Overlay" id="btn-heatmap" class="p-1.5 rounded text-slate-300 hover:bg-slate-700 hover:text-white transition flex items-center gap-1 text-xs px-2">
+                            <i data-lucide="thermometer" class="w-4 h-4"></i>
+                            <span>Thermal Map</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3D Rendering Canvas -->
+                <div id="canvas-container" class="w-full h-full flex-1 cursor-grab"></div>
+
+                <!-- Bottom Viewport Footer Bar -->
+                <div class="absolute bottom-3 left-3 right-3 z-10 glass-panel p-3 rounded-xl border border-slate-700/60 flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-4 text-slate-300">
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Cyl 1: Healthy
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span id="cyl2-indicator" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Cyl 2: Healthy
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Cyl 3: Healthy
+                        </span>
+                        <span class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Cyl 4: Healthy
+                        </span>
+                    </div>
+
+                    <div id="inspected-part-label" class="text-sky-400 font-mono font-semibold">
+                        Click any component to inspect
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Telemetry Digital Gauge Cards -->
+            <div class="grid grid-cols-4 gap-3">
+                
+                <!-- CHT Avg -->
+                <div class="glass-panel p-3 rounded-xl flex flex-col justify-between">
+                    <div class="text-[11px] text-slate-400 flex items-center justify-between">
+                        <span>CHT (Cylinder Head)</span>
+                        <i data-lucide="thermometer" class="w-3.5 h-3.5 text-amber-400"></i>
+                    </div>
+                    <div id="gauge-cht" class="text-xl font-bold font-mono text-amber-400 my-1">162 °C</div>
+                    <div class="text-[10px] text-slate-400 flex justify-between">
+                        <span>Max Limit: 230°C</span>
+                        <span id="cht-status" class="text-emerald-400 font-semibold">Normal</span>
+                    </div>
+                </div>
+
+                <!-- EGT Avg -->
+                <div class="glass-panel p-3 rounded-xl flex flex-col justify-between">
+                    <div class="text-[11px] text-slate-400 flex items-center justify-between">
+                        <span>EGT (Exhaust Gas)</span>
+                        <i data-lucide="flame" class="w-3.5 h-3.5 text-orange-400"></i>
+                    </div>
+                    <div id="gauge-egt" class="text-xl font-bold font-mono text-orange-400 my-1">745 °C</div>
+                    <div class="text-[10px] text-slate-400 flex justify-between">
+                        <span>Max Limit: 880°C</span>
+                        <span id="egt-status" class="text-emerald-400 font-semibold">Normal</span>
+                    </div>
+                </div>
+
+                <!-- Oil Pressure -->
+                <div class="glass-panel p-3 rounded-xl flex flex-col justify-between">
+                    <div class="text-[11px] text-slate-400 flex items-center justify-between">
+                        <span>Oil Pressure</span>
+                        <i data-lucide="droplet" class="w-3.5 h-3.5 text-sky-400"></i>
+                    </div>
+                    <div id="gauge-oil" class="text-xl font-bold font-mono text-sky-400 my-1">4.8 bar</div>
+                    <div class="text-[10px] text-slate-400 flex justify-between">
+                        <span>Min Safe: 2.5 bar</span>
+                        <span id="oil-status" class="text-emerald-400 font-semibold">Normal</span>
+                    </div>
+                </div>
+
+                <!-- Vibration RMS -->
+                <div class="glass-panel p-3 rounded-xl flex flex-col justify-between">
+                    <div class="text-[11px] text-slate-400 flex items-center justify-between">
+                        <span>Vibration RMS</span>
+                        <i data-lucide="activity" class="w-3.5 h-3.5 text-purple-400"></i>
+                    </div>
+                    <div id="gauge-vib" class="text-xl font-bold font-mono text-purple-400 my-1">2.1 mm/s</div>
+                    <div class="text-[10px] text-slate-400 flex justify-between">
+                        <span>Max Limit: 7.5</span>
+                        <span id="vib-status" class="text-emerald-400 font-semibold">Normal</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- Right Sidebar: Time-Series Sensor Charts & Diagnostic Logs (Cols 3) -->
+        <aside class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+            
+            <!-- Real-time Telemetry Charts -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3 flex-1">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center justify-between pb-2 border-b border-slate-700/60">
+                    <span class="flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4"></i> Live Sensor Telemetry</span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                </h2>
+
+                <!-- CHT Chart -->
+                <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+                    <div class="flex justify-between text-[11px]">
+                        <span class="text-slate-300 font-semibold">Cylinder Head Temp (°C)</span>
+                        <span id="chart-cht-val" class="font-mono text-amber-400">162°C</span>
+                    </div>
+                    <div class="h-28">
+                        <canvas id="chartCht"></canvas>
+                    </div>
+                </div>
+
+                <!-- Oil Pressure & Vibration Chart -->
+                <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+                    <div class="flex justify-between text-[11px]">
+                        <span class="text-slate-300 font-semibold">Oil Pressure (bar) & Vibration</span>
+                        <span id="chart-oil-val" class="font-mono text-sky-400">4.8 bar</span>
+                    </div>
+                    <div class="h-28">
+                        <canvas id="chartOilVib"></canvas>
+                    </div>
+                </div>
+
+                <!-- AI Diagnostic Log Output -->
+                <div class="flex flex-col gap-1.5 flex-1 min-h-[140px]">
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-300">
+                        <span class="flex items-center gap-1.5"><i data-lucide="terminal" class="w-3.5 h-3.5 text-sky-400"></i> System Event Log</span>
+                        <button onclick="clearLogs()" class="text-[10px] text-slate-400 hover:text-slate-200">Clear</button>
+                    </div>
+                    <div id="event-log-container" class="bg-slate-950/90 rounded-xl p-2.5 border border-slate-800 font-mono text-[10px] text-slate-300 overflow-y-auto flex-1 h-32 space-y-1">
+                        <div class="text-emerald-400">[00:00.00] Telemetry stream initialized at 10 Hz</div>
+                        <div class="text-sky-400">[00:00.01] Digital Twin engine state synced: CRUISE profile</div>
+                        <div class="text-slate-400">[00:00.05] AI Model IsolationForest initialized (0 anomalies detected)</div>
+                    </div>
+                </div>
+
+            </div>
+
+        </aside>
+
+    </main>
+
+    <!-- Component Diagnostic Modal (Triggered when clicking a 3D Part) -->
+    <div id="component-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 flex flex-col gap-4 relative">
+            <button onclick="closeComponentModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center gap-3 border-b border-slate-700/80 pb-3">
+                <div class="p-2.5 bg-sky-500/20 text-sky-400 rounded-xl border border-sky-500/40">
+                    <i data-lucide="wrench" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h3 id="modal-part-name" class="text-base font-bold text-white">Component Inspection</h3>
+                    <p id="modal-part-id" class="text-xs text-sky-400 font-mono">ID: ENG-CYL-02</p>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="bg-slate-950/70 p-3 rounded-xl border border-slate-800 grid grid-cols-2 gap-2">
+                    <div>
+                        <span class="text-slate-400 block">Operating Temp</span>
+                        <span id="modal-part-temp" class="text-sm font-bold font-mono text-amber-400">165 °C</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Component Health</span>
+                        <span id="modal-part-health" class="text-sm font-bold font-mono text-emerald-400">98.2% (Good)</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Stress Level</span>
+                        <span id="modal-part-stress" class="text-sm font-bold font-mono text-slate-200">Nominal</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block">Maintenance Status</span>
+                        <span id="modal-part-maint" class="text-sm font-bold font-mono text-emerald-400">OK</span>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-slate-400 font-semibold mb-1 block">Diagnostic Notes:</span>
+                    <p id="modal-part-desc" class="text-slate-300 leading-relaxed bg-slate-950/50 p-2.5 rounded-lg border border-slate-800">
+                        Cylinder Head #2 assembly including dual spark plug sockets, intake valve port, and EGT thermocouple probe.
+                    </p>
+                </div>
+            </div>
+
+            <button onclick="closeComponentModal()" class="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-semibold text-xs transition">
+                Close Inspection
+            </button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="engine3d.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
